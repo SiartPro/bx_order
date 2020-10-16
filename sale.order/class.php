@@ -162,10 +162,10 @@ class CSiartOrder extends CBitrixComponent
             }
 
         } else {
-            // получаем актуальную корзину с вычесленными правилами и скидками
+            // получаем актуальную корзину с вычисленными правилами и скидками
             $this->getBasketItems();
 
-            // при наличии не пустой корзины получаем даные для вывода
+            // при наличии не пустой корзины получаем данные для вывода
             if (count($this->arResult['ITEMS']) > 0) {
                 $this->arResult['DELIVERY_LIST'] = $this->getOrderDeliveryList();
                 $this->arResult['PAY_SYSTEM_LIST'] = $this->getOrderPaySystemList();
@@ -330,7 +330,7 @@ class CSiartOrder extends CBitrixComponent
     }
 
     /**
-     * Получаем содержимое корзины, пассчитываем все скидки и правила
+     * Получаем содержимое корзины, рассчитываем все скидки и правила
      */
     private function getBasketItems()
     {
@@ -338,50 +338,50 @@ class CSiartOrder extends CBitrixComponent
          * @var \Bitrix\Sale\BasketItem $item
          */
         $this->arResult['ITEMS'] = array();
-        $arDiscountData = $this->getDiscountSum();
 
-        $basket = $this->order->getBasket();
+        if (!empty($this->order)) {
+            $arDiscountData = $this->getDiscountSum();
+            $basket = $this->order->getBasket();
+            $strCurrency = $this->order->getCurrency();
+            $this->arResult['TOTAL_QUANTITY'] = 0;
+            $this->arResult['~TOTAL_PRICE'] = 0;
+            foreach ($basket->getOrderableItems() as $item) {
+                // цены из рассчитанных скидок, если задано правило округления, оно будет применено
+                $flRoundPrice = Price::roundPrice($item->getField('PRICE_TYPE_ID'), $arDiscountData['BASKET_ITEMS'][$item->getProductId()], $strCurrency);
+                $flRoundBasePrice = Price::roundPrice($item->getField('PRICE_TYPE_ID'), $item->getPrice(), $strCurrency);
+                $arFields = array(
+                    'ID' => $item->getId(),
+                    'EXTERNAL_ID' => $this->getExternalId($item->getProductId()),
+                    'PRODUCT_ID' => $item->getProductId(),
+                    'PARENT_NAME' => $this->getParentName($item->getProductId()),
+                    'NAME' => $item->getField('NAME'),
+                    'DETAIL_PAGE_URL' => $this->getDetailPageUrl($item->getProductId()),
+                    'QUANTITY' => $item->getQuantity(),
+                    '~PRICE' => $flRoundPrice,
+                    'PRICE' => CCurrencyLang::CurrencyFormat($flRoundPrice, $strCurrency),
+                    '~BASE_PRICE' => $flRoundBasePrice,
+                    'BASE_PRICE' => CCurrencyLang::CurrencyFormat($flRoundBasePrice, $strCurrency),
+                    '~FINAL_BASE_PRICE' => $flRoundBasePrice * $item->getQuantity(),
+                    'FINAL_BASE_PRICE' => CCurrencyLang::CurrencyFormat(($flRoundBasePrice * $item->getQuantity()), $strCurrency),
+                    '~FINAL_PRICE' => $flRoundPrice * $item->getQuantity(),
+                    'FINAL_PRICE' => CCurrencyLang::CurrencyFormat(($flRoundPrice * $item->getQuantity()), $strCurrency),
+                    'IMAGE' => $this->getImage($item->getProductId()),
+                    'PREVIEW_TEXT' => $this->getPreviewText($item->getProductId()),
+                    'PRICE_TYPE_ID' => $item->getField('PRICE_TYPE_ID'),
+                    'PROPERTIES' => $this->getProperties($item->getProductId())
+                );
 
-        $strCurrency = $this->order->getCurrency();
-        $this->arResult['TOTAL_QUANTITY'] = 0;
-        $this->arResult['~TOTAL_PRICE'] = 0;
-        foreach ($basket->getOrderableItems() as $item) {
-            // цены из рассчитанных скидок, если задано правило округления, оно будет применено
-            $flRoundPrice = Price::roundPrice($item->getField('PRICE_TYPE_ID'), $arDiscountData['BASKET_ITEMS'][$item->getProductId()], $strCurrency);
-            $flRoundBasePrice = Price::roundPrice($item->getField('PRICE_TYPE_ID'), $item->getPrice(), $strCurrency);
-            $arFields = array(
-                'ID' => $item->getId(),
-                'EXTERNAL_ID' => $this->getExternalId($item->getProductId()),
-                'PRODUCT_ID' => $item->getProductId(),
-                'PARENT_NAME' => $this->getParentName($item->getProductId()),
-                'NAME' => $item->getField('NAME'),
-                'DETAIL_PAGE_URL' => $this->getDetailPageUrl($item->getProductId()),
-                'QUANTITY' => $item->getQuantity(),
-                '~PRICE' => $flRoundPrice,
-                'PRICE' => CCurrencyLang::CurrencyFormat($flRoundPrice, $strCurrency),
-                '~BASE_PRICE' => $flRoundBasePrice,
-                'BASE_PRICE' => CCurrencyLang::CurrencyFormat($flRoundBasePrice, $strCurrency),
-                '~FINAL_BASE_PRICE' => $flRoundBasePrice * $item->getQuantity(),
-                'FINAL_BASE_PRICE' => CCurrencyLang::CurrencyFormat(($flRoundBasePrice * $item->getQuantity()), $strCurrency),
-                '~FINAL_PRICE' => $flRoundPrice * $item->getQuantity(),
-                'FINAL_PRICE' => CCurrencyLang::CurrencyFormat(($flRoundPrice * $item->getQuantity()), $strCurrency),
-                'IMAGE' => $this->getImage($item->getProductId()),
-                'PREVIEW_TEXT' => $this->getPreviewText($item->getProductId()),
-                'PRICE_TYPE_ID' => $item->getField('PRICE_TYPE_ID'),
-                'PROPERTIES' => $this->getProperties($item->getProductId())
-            );
+                $this->arResult['TOTAL_QUANTITY'] += $item->getQuantity();
+                $this->arResult['~TOTAL_PRICE'] += $flRoundPrice * $item->getQuantity();
 
-            $this->arResult['TOTAL_QUANTITY'] += $item->getQuantity();
-            $this->arResult['~TOTAL_PRICE'] += $flRoundPrice * $item->getQuantity();
+                if (empty($arFields['PARENT_NAME'])) {
+                    $arFields['PARENT_NAME'] = $arFields['NAME'];
+                }
 
-            if (empty($arFields['PARENT_NAME'])) {
-                $arFields['PARENT_NAME'] = $arFields['NAME'];
+                $this->arResult['ITEMS'][] = $arFields;
             }
-
-            $this->arResult['ITEMS'][] = $arFields;
+            $this->arResult['TOTAL_PRICE'] = CCurrencyLang::CurrencyFormat($this->arResult['~TOTAL_PRICE'], $strCurrency);
         }
-
-        $this->arResult['TOTAL_PRICE'] = CCurrencyLang::CurrencyFormat($this->arResult['~TOTAL_PRICE'], $strCurrency);
     }
 
     /**

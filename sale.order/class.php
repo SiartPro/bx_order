@@ -98,29 +98,15 @@ class CSiartOrder extends CBitrixComponent
         }
 
         // Служба доставки по умолчанию
-        if (isset($arParams['DELIVERY_ID']) && (int)$arParams['DELIVERY_ID'] > 0) {
-            $arParams['DELIVERY_ID'] = (int)$arParams['DELIVERY_ID'];
-
-        } else {
-            if ((int)$this->request['DELIVERY_ID'] > 0) {
-                $arParams['DELIVERY_ID'] = (int)$this->request['DELIVERY_ID'];
-
-            } else {
-                $arParams['DELIVERY_ID'] = 0;
-            }
+        $arParams['DELIVERY_ID'] = (int)$arParams['DELIVERY_ID'];
+        if ((int)$this->request['DELIVERY_ID'] > 0) {
+            $arParams['DELIVERY_ID'] = (int)$this->request['DELIVERY_ID'];
         }
 
         // Платёжная система по умолчанию
-        if (isset($arParams['PAYMENT_ID']) && (int)$arParams['PAYMENT_ID'] > 0) {
-            $arParams['PAYMENT_ID'] = (int)$arParams['PAYMENT_ID'];
-
-        } else {
-            if ((int)$this->request['PAYMENT_ID'] > 0) {
-                $arParams['PAYMENT_ID'] = (int)$this->request['PAYMENT_ID'];
-
-            } else {
-                $arParams['PAYMENT_ID'] = 0;
-            }
+        $arParams['PAYMENT_ID'] = (int)$arParams['PAYMENT_ID'];
+        if ((int)$this->request['PAYMENT_ID'] > 0) {
+            $arParams['PAYMENT_ID'] = (int)$this->request['PAYMENT_ID'];
         }
 
         // Использовать ли номер заказа вместо ID?
@@ -134,6 +120,8 @@ class CSiartOrder extends CBitrixComponent
      * Точка входа.
      *
      * @return mixed|void|null
+     * @throws SystemException
+     * @throws \Bitrix\Main\NotSupportedException
      */
     public function executeComponent()
     {
@@ -388,6 +376,10 @@ class CSiartOrder extends CBitrixComponent
      * Рассчитываем скидки и применяем правила для корзины.
      *
      * @return array
+     * @throws \Bitrix\Main\ArgumentException
+     * @throws \Bitrix\Main\ArgumentNullException
+     * @throws \Bitrix\Main\ArgumentTypeException
+     * @throws \Bitrix\Main\NotImplementedException
      */
     private function getDiscountSum()
     {
@@ -958,6 +950,8 @@ class CSiartOrder extends CBitrixComponent
      *
      * @param $order
      * @return bool|mixed|Shipment
+     * @throws \Bitrix\Main\ArgumentException
+     * @throws \Bitrix\Main\ArgumentNullException
      */
     private function getCurrentShipment($order)
     {
@@ -975,6 +969,8 @@ class CSiartOrder extends CBitrixComponent
      * Список доступных платёжных систем.
      *
      * @return array
+     * @throws SystemException
+     * @throws \Bitrix\Main\ArgumentException
      */
     private function getOrderPaySystemList()
     {
@@ -1015,6 +1011,7 @@ class CSiartOrder extends CBitrixComponent
      * Список свойств заказа разбитый по группам, с уже введёнными значениями.
      *
      * @return array
+     * @throws SystemException
      */
     private function getOrderPropsList()
     {
@@ -1109,7 +1106,7 @@ class CSiartOrder extends CBitrixComponent
 
     /**
      * Инициализация системы доставки.
-     * Усттанавливается оставка и склад. если были переданы.
+     * Устанавливается доставка и склад. если были переданы.
      * Создаётся отгрузка.
      *
      * @param $shipment
@@ -1119,7 +1116,7 @@ class CSiartOrder extends CBitrixComponent
      */
     private function initDelivery($shipment)
     {
-        $deliveryId = (int)$this->request['DELIVERY_ID'];
+        $deliveryId = (int)$this->arParams['DELIVERY_ID'];
         /** @var \Bitrix\Sale\ShipmentCollection $shipmentCollection */
         $shipmentCollection = $shipment->getCollection();
         $order = $shipmentCollection->getOrder();

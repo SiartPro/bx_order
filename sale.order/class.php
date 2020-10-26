@@ -171,10 +171,7 @@ class CSiartOrder extends CBitrixComponent
 
         // запрос AJAX без создания заказа, отдаём JSON
         if ($this->request['MODE'] == $this->arResult['HIDDEN'] && $this->request->isAjaxRequest()) {
-            $APPLICATION->RestartBuffer();
-            header("Content-type:application/json");
-            echo json_encode($this->arResult);
-            die();
+            $this->arResult['IS_AJAX'] = true;
         }
 
         // подключаем шаблон
@@ -187,8 +184,6 @@ class CSiartOrder extends CBitrixComponent
      */
     private function createVirtualOrder()
     {
-        global $USER;
-
         try {
             // Получаем актуальную корзину, текущую или из заказа, если его ID был передан в качестве 'ORDER_ID'
             if (!is_numeric($this->request->get('ORDER_ID'))) {
@@ -203,15 +198,12 @@ class CSiartOrder extends CBitrixComponent
             }
 
             if (count($basket->getOrderableItems()) > 0) {
-                // Ищем пользователя, или создаём, авторизуем
-                if (!$USER->IsAuthorized()) {
-                    $intUserId = $this->getUserId();
-                    $USER->Authorize($intUserId);
-                }
+                // Ищем пользователя, или создаём, возвращаем id
+                $intUserId = $this->getUserId();
 
                 // Создаём или получаем заказ
                 if (!is_numeric($this->request->get('ORDER_ID'))) {
-                    $this->order = Order::create($this->getSiteId(), $USER->GetID());
+                    $this->order = Order::create($this->getSiteId(), $intUserId);
                     $this->order->setBasket($basket);
 
                 } else {
@@ -291,13 +283,11 @@ class CSiartOrder extends CBitrixComponent
                         }
 
                     } else {
-                        $this->initAffiliate();
-
-                        // Опдлата баллами
+                        // Оплата баллами
                         if ((int)$this->request->get('PAY_BONUS') > 0) {
                             // оплата баллами
                             $withdrawSum = CSaleUserAccount::Withdraw(
-                                $USER->GetID(),
+                                $intUserId,
                                 $this->request->get('PAY_BONUS'),
                                 $this->order->getCurrency(),
                                 $this->order->getId()
@@ -597,74 +587,81 @@ class CSiartOrder extends CBitrixComponent
      */
     private function getUserId()
     {
+        global $USER;
+
         $intUserId = 0;
 
-        if (!empty($this->request->get($this->arParams['NEW_USER_LOGIN_FIELD']))) {
-            $strLogin = $this->request->get($this->arParams['NEW_USER_LOGIN_FIELD']);
+        if ($USER->IsAuthorized()) {
+            $intUserId = $USER->GetID();
 
-            $arUserParams = array(
-                'LOGIN' => $strLogin
-            );
-            if (!empty($this->request->get('PHONE'))) {
-                $arUserParams['PERSONAL_MOBILE'] = $this->request->get('PHONE');
-            }
-            if (!empty($this->request->get('NAME'))) {
-                $arUserParams['NAME'] = $this->request->get('NAME');
-            }
-            if (!empty($this->request->get('EMAIL'))) {
-                $arUserParams['EMAIL'] = $this->request->get('EMAIL');
-            }
+        } else {
+            if (!empty($this->request->get($this->arParams['NEW_USER_LOGIN_FIELD']))) {
+                $strLogin = $this->request->get($this->arParams['NEW_USER_LOGIN_FIELD']);
 
-            try {
-                $dbUser = \CUser::GetByLogin($strLogin);
-                if ($arUser = $dbUser->Fetch()) {
-                    // Пользователь существует
-                    $arUser['IS_NEW'] = false;
+                $arUserParams = array(
+                    'LOGIN' => $strLogin
+                );
+                if (!empty($this->request->get('PHONE'))) {
+                    $arUserParams['PERSONAL_MOBILE'] = $this->request->get('PHONE');
+                }
+                if (!empty($this->request->get('NAME'))) {
+                    $arUserParams['NAME'] = $this->request->get('NAME');
+                }
+                if (!empty($this->request->get('EMAIL'))) {
+                    $arUserParams['EMAIL'] = $this->request->get('EMAIL');
+                }
 
-                } else {
-                    // Пользователь новый
-                    if (empty($arUserParams['PASSWORD'])) {
-                        $arUserParams['PASSWORD'] = uniqid();
-                        $arUserParams['CONFIRM_PASSWORD'] = $arUserParams['PASSWORD'];
-                    }
-                    $user = new \CUser;;
-                    $intUserID = $user->Add($arUserParams);
-
-                    if (intval($intUserID)) {
-                        $arUser = $arUserParams;
-                        $arUser['ID'] = $intUserID;
-                        $arUser['IS_NEW'] = true;
+                try {
+                    $dbUser = \CUser::GetByLogin($strLogin);
+                    if ($arUser = $dbUser->Fetch()) {
+                        // Пользователь существует
+                        $arUser['IS_NEW'] = false;
 
                     } else {
-                        throw new SystemException($user->LAST_ERROR);
+                        // Пользователь новый
+                        if (empty($arUserParams['PASSWORD'])) {
+                            $arUserParams['PASSWORD'] = uniqid();
+                            $arUserParams['CONFIRM_PASSWORD'] = $arUserParams['PASSWORD'];
+                        }
+                        $user = new \CUser;
+                        $intUserID = $user->Add($arUserParams);
+
+                        if (intval($intUserID)) {
+                            $arUser = $arUserParams;
+                            $arUser['ID'] = $intUserID;
+                            $arUser['IS_NEW'] = true;
+
+                        } else {
+                            throw new SystemException($user->LAST_ERROR);
+                        }
                     }
-                }
 
-                if (!empty($this->arParams['NEW_USER_EVENT_CODE'])) {
-                    // был создан аккаунт, отправим письмо
-                    $arMailFields = array(
-                        'EVENT_NAME' => $this->arParams['NEW_USER_EVENT_CODE'],
-                        'LID' => $this->getSiteId(),
-                        'C_FIELDS' => array(
-                            'NAME' => $arUser['NAME'],
-                            'LOGIN' => $this->request->get('PHONE'),
-                            'EMAIL' => $arUser['EMAIL'],
-                            'PASSWORD' => $arUser['PASSWORD'],
-                        )
-                    );
-                    Event::send($arMailFields);
-                }
+                    if (!empty($this->arParams['NEW_USER_EVENT_CODE'])) {
+                        // был создан аккаунт, отправим письмо
+                        $arMailFields = array(
+                            'EVENT_NAME' => $this->arParams['NEW_USER_EVENT_CODE'],
+                            'LID' => $this->getSiteId(),
+                            'C_FIELDS' => array(
+                                'NAME' => $arUser['NAME'],
+                                'LOGIN' => $this->request->get('PHONE'),
+                                'EMAIL' => $arUser['EMAIL'],
+                                'PASSWORD' => $arUser['PASSWORD'],
+                            )
+                        );
+                        Event::send($arMailFields);
+                    }
 
-                if ($arUser !== false) {
-                    $intUserId = $arUser['ID'];
+                    if ($arUser !== false) {
+                        $intUserId = $arUser['ID'];
+                    }
+                } catch (SystemException $e) {
+                    $intUserId = CSaleUser::GetAnonymousUserID();
                 }
-            } catch (SystemException $e) {
+            }
+
+            if ($intUserId == 0) {
                 $intUserId = CSaleUser::GetAnonymousUserID();
             }
-        }
-
-        if ($intUserId == 0) {
-            $intUserId = CSaleUser::GetAnonymousUserID();
         }
 
         return $intUserId;

@@ -134,6 +134,9 @@ class CSiartOrder extends CBitrixComponent
 
         // если была команда на сохранение заказа
         if ($this->request['MODE'] == $this->arResult['HIDDEN'] && $this->request['SAVE'] == 'Y' && empty($this->arResult['ERRORS'])) {
+            // сохраним номер заказа
+            $_SESSION['ORDER_ID'] = $this->getOrderNumber();
+
             // если запрос был AJAX, отдаём JSON
             if ($this->request->isAjaxRequest()) {
                 $APPLICATION->RestartBuffer();
@@ -144,6 +147,12 @@ class CSiartOrder extends CBitrixComponent
                 die();
             }
 
+            // если нужна оплата
+            foreach ($this->getOrderPaySystemList() as $arFields) {
+                if ($arFields['SELECTED'] && $arFields['IS_CASH'] == 'A' && !empty($this->arParams['PATH_TO_PAY'])) {
+                    LocalRedirect($this->arParams['PATH_TO_PAY'] . '?ORDER_ID=' . $this->getOrderNumber());
+                }
+            }
             // если была передана финальная страница, перенаправляем на неё
             if (!empty($this->arParams['PATH_TO_SUCCESS'])) {
                 LocalRedirect($this->arParams['PATH_TO_SUCCESS'] . '?ORDER_ID=' . $this->getOrderNumber());

@@ -673,6 +673,10 @@ class CSiartOrder extends CBitrixComponent
             }
         }
 
+        if ($this->arParams['USER_NEED_AUTHORIZE'] && $this->request['SAVE'] == 'Y') {
+            $USER->Authorize($intUserId, true);
+        }
+
         return $intUserId;
     }
 
